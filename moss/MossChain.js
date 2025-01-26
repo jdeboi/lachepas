@@ -1,54 +1,67 @@
 class MossBush {
-  constructor(x, y, numChains) {
-    this.mosChains = [];
+  constructor(x, y, numChains, szFactor) {
+    this.mossChains = [];
+    this.szFactor = szFactor;
     for (let i = 0; i < numChains; i++) {
-      const dx = random(-numChains * 2, numChains * 2);
-      const dy = random(-5, 5);
-      this.mosChains.push(new MossChain(x + dx, y + dy));
+      const dx = i * 3 * szFactor;
+      const dy = random(-5, 5) * szFactor;
+      const minLen = 100 * szFactor;
+      const maxLen = 400 * szFactor;
+      let len = map(i, 0, numChains / 2, minLen, maxLen);
+      if (i > numChains / 2) {
+        len = map(i, numChains / 2, numChains, maxLen, minLen);
+      }
+      len += random(-10, 10) * szFactor;
+      this.mossChains.push(new MossChain(x + dx, y + dy, len, szFactor));
     }
   }
 
   display() {
-    this.mosChains.forEach((mosChain) => {
-      mosChain.display();
+    this.mossChains.forEach((mossChain) => {
+      mossChain.display();
     });
   }
 
   update(growthRate) {
-    this.mosChains.forEach((mosChain) => {
-      mosChain.update();
-      mosChain.grow(growthRate);
+    this.mossChains.forEach((mossChain) => {
+      // remove current mossChain from this.mossChains
+      const otherChains = this.mossChains.filter(
+        (chain) => chain !== mossChain
+      );
+      mossChain.update(otherChains);
+      mossChain.grow(growthRate);
     });
   }
 
   handleMouseDragged() {
-    this.mosChains.forEach((mosChain) => {
-      mosChain.handleMouseDragged();
+    this.mossChains.forEach((mossChain) => {
+      mossChain.handleMouseDragged();
     });
   }
 
   handleMousePressed() {
-    this.mosChains.forEach((mosChain) => {
-      mosChain.handleMousePressed();
+    this.mossChains.forEach((mossChain) => {
+      mossChain.handleMousePressed();
     });
   }
 
   handleMouseReleased() {
-    this.mosChains.forEach((mosChain) => {
-      mosChain.handleMouseReleased();
+    this.mossChains.forEach((mossChain) => {
+      mossChain.handleMouseReleased();
     });
   }
 }
 
 class MossChain {
-  constructor(x, y) {
+  constructor(x, y, terminalLength, szFactor) {
     this.nodes = [];
+    this.szFactor = szFactor;
     this.constraints = [];
     this.draggingNode = null;
     this.col = this.getColor();
-    this.nodeSpacing = random(10, 30) * mossFactor;
+    this.nodeSpacing = random(10, 30) * szFactor;
     this.growthLength = 0; // Tracks the total growth length
-    this.terminalLength = random(300 * mossFactor, 400 * mossFactor);
+    this.terminalLength = terminalLength * szFactor;
     this.isGrowing = true;
     // Add the first node
     this.nodes.push({
@@ -57,7 +70,7 @@ class MossChain {
       prevX: x,
       prevY: y,
       isFixed: true, // First node is fixed
-      leaves: [], // No leaves on the root node
+      leaves: this.createLeaves(), // No leaves on the root node
     });
 
     // this.tip = {
@@ -79,7 +92,7 @@ class MossChain {
     const leafCount = int(random(1, 4)); // 1 to 3 leaves
     let leaves = [];
     for (let i = 0; i < leafCount; i++) {
-      leaves.push(new Leaf(i));
+      leaves.push(new Leaf(i, this.szFactor));
     }
     return leaves;
   }
@@ -132,7 +145,7 @@ class MossChain {
   }
 
   createNode() {
-    this.nodeSpacing = random(10, 30) * mossFactor;
+    this.nodeSpacing = random(10, 30) * this.szFactor;
     let tipNode = this.nodes[this.nodes.length - 1];
     this.nodes.push({
       x: tipNode.x,
@@ -154,7 +167,50 @@ class MossChain {
     });
   }
 
-  update() {
+  // Apply attractive and repulsive forces between nodes
+  applyForces(otherChains) {
+    const otherNodes = otherChains.flatMap((chain) => chain.nodes);
+    const attractStrength = 0.05; // Strength of attraction
+    const repelStrength = 0.1; // Strength of repulsion
+    const distanceThreshold = 100; // Max distance for interactions
+
+    for (let i = 0; i < otherNodes.length; i++) {
+      let nodeA = otherNodes[i];
+      for (let j = i + 1; j < otherNodes.length; j++) {
+        let nodeB = otherNodes[j];
+        let dx = nodeB.x - nodeA.x;
+        let dy = nodeB.y - nodeA.y;
+        let distance = sqrt(dx * dx + dy * dy);
+        if (distance === 0 || distance > distanceThreshold) continue;
+
+        // Normalize the vector
+        let nx = dx / distance;
+        let ny = dy / distance;
+
+        // Attractive force (Hooke's Law)
+        let attractForce = -attractStrength * (distance - this.nodeSpacing);
+
+        // Repulsive force (Inverse-square law)
+        let repelForce = repelStrength / (distance * distance);
+
+        // Combine forces
+        let totalForce = attractForce + repelForce;
+
+        // Apply forces to nodes
+        if (!nodeA.isFixed) {
+          nodeA.x -= totalForce * nx;
+          nodeA.y -= totalForce * ny;
+        }
+        if (!nodeB.isFixed) {
+          nodeB.x += totalForce * nx;
+          nodeB.y += totalForce * ny;
+        }
+      }
+    }
+  }
+
+  update(otherNodes) {
+    // this.applyForces(otherNodes);
     this.applyPhysics();
     this.applyKinks();
     this.enforceConstraints();
@@ -257,13 +313,13 @@ class MossChain {
 }
 
 class Leaf {
-  constructor(id) {
+  constructor(id, szFactor) {
     let { angle, terminalLength, curvature, direction } = this.getLeaf(id);
     this.angle = angle;
     this.length = 0; // Current length
     this.curvature = curvature;
     this.direction = direction;
-    this.terminalLength = terminalLength * mossFactor; // Max length
+    this.terminalLength = terminalLength * szFactor; // Max length
   }
 
   getLeaf(id) {
