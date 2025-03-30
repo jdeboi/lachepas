@@ -1,22 +1,49 @@
 const startYear = 1600;
 const endYear = new Date().getFullYear();
+const boxSpacing = 2;
+const boxSize = 10;
 let currentYear = startYear;
+let louisianaImg;
+let forestImg;
 
+function preload() {
+  louisianaImg = loadImage("../louisiana.png");
+  forestImg = loadImage("../laforest.png");
+}
 function setup() {
   createCanvas(windowWidth, windowHeight);
+
+  const factor = 0.5;
+  louisianaImg.resize(
+    louisianaImg.width * factor,
+    louisianaImg.height * factor
+  );
+  forestImg.resize(louisianaImg.width, louisianaImg.height);
 }
 
 function draw() {
-  background(0);
+  background(0, 80, 100);
+
   // incrementYear();
 
-  const x = 20;
+  const w = louisianaImg.width;
+  const h = louisianaImg.height;
+  const x = (width - w) / 2;
+  const y = (height - h) / 2;
 
-  currentYear = floor(map(mouseX, x, width - x, startYear, endYear));
+  currentYear = floor(map(mouseX, x, x + w, startYear, endYear));
   currentYear = constrain(currentYear, startYear, endYear);
-  displayOriginalTrees(x, x);
-  displayAcreBoxes(x, x);
-  displayGraph(x, height / 2, width - 2 * x, height / 2 - x);
+
+  noStroke();
+  // image(louisianaImg, x, y);
+
+  //
+  //
+  // displayTerrainBoxes(x, y);
+  displayLouisianaAcreBoxes(x, y);
+  displayOriginalAcreBoxes(x, y);
+  displayAcreBoxes(x, y, interpolateCypressTrees(currentYear));
+  displayGraph(x, y + h / 2, w, h / 2);
 }
 
 function incrementYear() {
@@ -30,30 +57,158 @@ function mousePressed() {
   currentYear = startYear;
 }
 
-function displayOriginalTrees(x, y) {
-  displayAcreBoxes(x, y, 0, false);
+function displayLouisianaAcreBoxes(x, y) {
+  const louisianaAcres = 33520320;
+  displayAcreBoxes(x, y, louisianaAcres, false, true);
 }
 
-function displayAcreBoxes(x, y, year = currentYear, isFilled = true) {
+function displayOriginalAcreBoxes(x, y) {
+  const numAcres = interpolateCypressTrees(1600);
+  displayAcreBoxes(x, y, numAcres, false, false);
+}
+
+function getNumberOfBoxes() {
+  // const screenArea = width * height;
+  const percentageBlackPixels = 0.5443;
+  const louisianaImgArea = louisianaImg.width * louisianaImg.height;
+  const pixelAreaLouisiana = louisianaImgArea * percentageBlackPixels;
+
+  const numBoxes = pixelAreaLouisiana / (boxSize + boxSpacing) ** 2;
+  // const numBoxesPerRow = floor(numBoxes / width);
+  // const numBoxesPerCol = floor(numBoxes / height);
+  // return numBoxesPerRow * numBoxesPerCol;
+  return numBoxes;
+}
+
+function getAcresPerBox() {
+  const louisianaAcres = 33520320;
+  const acresPerBox = louisianaAcres / getNumberOfBoxes();
+
+  return acresPerBox;
+}
+
+function displayTerrainBoxes(x, y) {
+  forestImg.loadPixels();
   push();
   translate(x, y);
-  const numAcres = interpolateCypressTrees(year) / 1000;
-  for (let i = 0; i < numAcres; i++) {
-    const acreSize = 10;
-    const spacing = 2;
-    const numAcresWidth = (width - 2 * x) / (acreSize + spacing);
-    const xR = (i % numAcresWidth) * (acreSize + spacing);
-    const yR = floor(i / numAcresWidth) * (acreSize + spacing);
+  translate(-5, -5);
 
-    if (isFilled) {
-      fill("green");
-    } else {
-      noFill();
+  const greenMapCol = color(13, 131, 74);
+  const orangeMapCol = color(239, 114, 71);
+  const yellowMapCol = color(245, 223, 67);
+  const redMapCol = color(226, 67, 71);
+
+  const terrain = {
+    OakPine: {
+      count: 0,
+      color: orangeMapCol,
+    },
+    LoblollyShortleafPine: {
+      count: 0,
+      color: yellowMapCol,
+    },
+    OakGumCypress: {
+      count: 0,
+      color: greenMapCol,
+    },
+    LongleafSlashPine: {
+      count: 0,
+      color: redMapCol,
+    },
+  };
+  let totalBoxes = 0;
+
+  for (let _x = 0; _x < forestImg.width; _x += boxSize + boxSpacing) {
+    for (let _y = 0; _y < forestImg.height; _y += boxSize + boxSpacing) {
+      const col = forestImg.get(_x, _y);
+      const laCol = louisianaImg.get(_x, _y);
+
+      // fill red, yellow, green, or no fill based on col
+      if (isCloseToColor(terrain.OakPine.color, col)) {
+        fill(terrain.OakPine.color);
+        terrain.OakPine.count++;
+      } else if (isCloseToColor(terrain.LoblollyShortleafPine.color, col)) {
+        fill(terrain.LoblollyShortleafPine.color);
+        terrain.LoblollyShortleafPine.count++;
+      } else if (isCloseToColor(terrain.OakGumCypress.color, col)) {
+        fill(terrain.OakGumCypress.color);
+        terrain.OakGumCypress.count++;
+      } else if (isCloseToColor(terrain.LongleafSlashPine.color, col)) {
+        fill(terrain.LongleafSlashPine.color);
+        terrain.LongleafSlashPine.count++;
+      } else if (alpha(laCol) > 50) {
+        fill(0);
+      } else {
+        noFill();
+      }
+
+      totalBoxes++;
+      rect(_x, _y, boxSize, boxSize);
     }
-    stroke("green");
-    strokeWeight(1);
-    rect(xR, yR, acreSize, acreSize);
   }
+  pop();
+
+  // console.log(terrain.OakGumCypress.count / totalBoxes);
+}
+
+function isCloseToColor(targetCol, col) {
+  const r = red(targetCol);
+  const g = green(targetCol);
+  const b = blue(targetCol);
+  const d = dist(r, g, b, red(col), green(col), blue(col));
+  if (d < 30) {
+    return true;
+  }
+  return false;
+}
+
+function displayAcreBoxes(
+  x,
+  y,
+  numAcres,
+  isFilled = true,
+  isLouisiana = false
+) {
+  push();
+  translate(x, y);
+  // Ensure image is properly loaded
+  louisianaImg.loadPixels();
+
+  const numBoxesToDisplay = floor(numAcres / getAcresPerBox());
+  const numBoxesWidth = floor(louisianaImg.width / (boxSize + boxSpacing));
+
+  let drawnBoxes = 0;
+  let i = 0;
+
+  while (drawnBoxes < numBoxesToDisplay && i < numBoxesToDisplay * 2) {
+    const xR = (i % numBoxesWidth) * (boxSize + boxSpacing);
+    const yR = floor(i / numBoxesWidth) * (boxSize + boxSpacing);
+
+    // Get the pixel color at (xR, yR) in the Louisiana image
+    const col = louisianaImg.get(xR + boxSize / 2, yR + boxSize / 2); // Sample from center of box
+    const alphaVal = alpha(col); // Convert to brightness value
+    // Only draw if the pixel is black (or close to black)
+    if (alphaVal > 50) {
+      if (isFilled) {
+        fill("green");
+      } else {
+        noFill();
+      }
+
+      if (isLouisiana) {
+        stroke(0, 0, 0, 50);
+      } else {
+        stroke("green");
+      }
+
+      strokeWeight(1);
+      rect(xR, yR, boxSize, boxSize);
+      drawnBoxes++;
+    }
+
+    i++; // Move to next possible box position
+  }
+
   pop();
 }
 

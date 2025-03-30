@@ -33,7 +33,7 @@ function draw() {
   for (let z = maxLevel - 1; z >= 0; z--) {
     displayTreeLevel(z, xPosition, false);
   }
-
+  moveTrees();
   displayWaves();
   displayFrameRate();
 }
